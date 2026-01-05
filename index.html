@@ -278,6 +278,16 @@
         let locationHistory = [];
         let trackingStartTime = null;
         let trackingTimer = null;
+        let lastPosition = null;
+        let totalDistance = 0;
+
+        // GPS Accuracy Configuration
+        const GPS_CONFIG = {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 10000, // Increased timeout for better accuracy
+            maximumUpdateInterval: 3000 // Update every 3 seconds
+        };
 
         // PWA Manifest
         const manifest = {
@@ -726,6 +736,7 @@
                                     <div id="gps-info">
                                         <p class="text-muted">Waiting for GPS signal...</p>
                                     </div>
+                                    <div id="gps-error" class="alert alert-danger mt-2 d-none"></div>
                                 </div>
                             </div>
                             
@@ -1191,10 +1202,10 @@
             return historyMap;
         }
 
-        // GPS Tracking Functions
+        // GPS Tracking Functions - FIXED
         function startTracking() {
             if (!navigator.geolocation) {
-                alert('Geolocation is not supported by your browser');
+                showGPSError('Geolocation is not supported by your browser');
                 return;
             }
             
@@ -1206,20 +1217,30 @@
             document.getElementById('start-tracking').disabled = true;
             document.getElementById('stop-tracking').disabled = false;
             
-            const options = {
-                enableHighAccuracy: true,
-                maximumAge: 0,
-                timeout: 5000
-            };
-            
-            watchId = navigator.geolocation.watchPosition(
-                (position) => handlePositionUpdate(position),
-                (error) => handleGPSError(error),
-                options
+            // Request location permission first
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    // Permission granted, start watching
+                    watchId = navigator.geolocation.watchPosition(
+                        (position) => handlePositionUpdate(position),
+                        (error) => handleGPSError(error),
+                        GPS_CONFIG
+                    );
+                    
+                    // Handle first position
+                    handlePositionUpdate(position);
+                    
+                    // Start tracking timer
+                    startTrackingTimer();
+                },
+                (error) => {
+                    handleGPSError(error);
+                    isTracking = false;
+                    document.getElementById('start-tracking').disabled = false;
+                    document.getElementById('stop-tracking').disabled = true;
+                },
+                GPS_CONFIG
             );
-            
-            // Start tracking timer
-            startTrackingTimer();
         }
 
         function stopTracking() {
@@ -1243,37 +1264,69 @@
         }
 
         async function handlePositionUpdate(position) {
-            const locationData = {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy,
-                speed: position.coords.speed || 0,
-                heading: position.coords.heading,
-                timestamp: Date.now(),
-                userId: currentUser.uid,
-                name: currentUser.name
-            };
-            
-            // Update database
-            await database.ref('locations/' + currentUser.uid).set(locationData);
-            
-            // Save to history
-            await database.ref('history/' + currentUser.uid).push({
-                ...locationData,
-                timestamp: Date.now()
-            });
-            
-            // Add to route history
-            userRoute.push(locationData);
-            
-            // Update map
-            updateUserMarker(locationData);
-            
-            // Update GPS info display
-            updateGPSDisplay(position.coords);
-            
-            // Update stats
-            updateTrackingStats();
+            try {
+                // Validate position accuracy
+                if (position.coords.accuracy > 100) {
+                    console.warn('Low accuracy position:', position.coords.accuracy + 'm');
+                    // You can choose to skip low accuracy positions or handle them differently
+                }
+                
+                const locationData = {
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy,
+                    speed: position.coords.speed || 0,
+                    heading: position.coords.heading || 0,
+                    altitude: position.coords.altitude || 0,
+                    altitudeAccuracy: position.coords.altitudeAccuracy || 0,
+                    timestamp: Date.now(),
+                    userId: currentUser.uid,
+                    name: currentUser.name
+                };
+                
+                // Calculate distance moved
+                if (lastPosition) {
+                    const distance = calculateHaversineDistance(
+                        lastPosition.latitude,
+                        lastPosition.longitude,
+                        locationData.latitude,
+                        locationData.longitude
+                    );
+                    totalDistance += distance;
+                    
+                    // Update distance display
+                    document.getElementById('total-distance').textContent = totalDistance.toFixed(3) + ' km';
+                }
+                
+                lastPosition = locationData;
+                
+                // Update database
+                await database.ref('locations/' + currentUser.uid).set(locationData);
+                
+                // Save to history (limit frequency to avoid too many writes)
+                if (userRoute.length === 0 || Date.now() - userRoute[userRoute.length - 1].timestamp > 5000) {
+                    await database.ref('history/' + currentUser.uid).push({
+                        ...locationData,
+                        timestamp: Date.now()
+                    });
+                }
+                
+                // Add to route history
+                userRoute.push(locationData);
+                
+                // Update map
+                updateUserMarker(locationData);
+                
+                // Update GPS info display
+                updateGPSDisplay(position.coords);
+                
+                // Update stats
+                updateTrackingStats();
+                
+            } catch (error) {
+                console.error('Error handling position update:', error);
+                showGPSError('Error processing location data');
+            }
         }
 
         function updateUserMarker(location) {
@@ -1286,22 +1339,49 @@
                 map.removeLayer(userMarkers[currentUser.uid]);
             }
             
-            // Create new marker
+            // Create new marker with accuracy circle
             const marker = L.marker(latLng, {
                 icon: L.divIcon({ className: 'user-marker' })
             }).addTo(map);
             
+            // Add accuracy circle
+            if (location.accuracy && location.accuracy < 100) {
+                const accuracyCircle = L.circle(latLng, {
+                    radius: location.accuracy,
+                    color: '#2563eb',
+                    fillColor: '#2563eb',
+                    fillOpacity: 0.1,
+                    weight: 1
+                }).addTo(map);
+                
+                // Store reference to remove later
+                marker.accuracyCircle = accuracyCircle;
+            }
+            
             userMarkers[currentUser.uid] = marker;
             
-            // Center map on user if they're moving fast
-            if (location.speed > 2) {
-                map.setView(latLng);
-            }
+            // Center map on user (smooth animation)
+            map.panTo(latLng, {
+                animate: true,
+                duration: 1,
+                easeLinearity: 0.25
+            });
             
             // Draw route if we have enough points
             if (userRoute.length > 1) {
                 drawRoute();
             }
+            
+            // Update popup
+            marker.bindPopup(`
+                <div class="text-center">
+                    <strong>${currentUser.name || 'You'}</strong><br>
+                    📍 ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}<br>
+                    🚗 ${(location.speed * 3.6 || 0).toFixed(1)} km/h<br>
+                    🎯 ${location.accuracy.toFixed(1)}m accuracy<br>
+                    🕒 ${new Date(location.timestamp).toLocaleTimeString()}
+                </div>
+            `);
         }
 
         function drawRoute() {
@@ -1315,21 +1395,29 @@
             const latLngs = userRoute.map(loc => [loc.latitude, loc.longitude]);
             window.routeLayer = L.polyline(latLngs, {
                 color: '#2563eb',
-                weight: 3,
+                weight: 4,
                 opacity: 0.7,
-                smoothFactor: 1
+                smoothFactor: 1,
+                lineJoin: 'round',
+                lineCap: 'round'
             }).addTo(map);
         }
 
         function centerOnUser() {
-            if (userRoute.length > 0) {
-                const lastLocation = userRoute[userRoute.length - 1];
-                map.setView([lastLocation.latitude, lastLocation.longitude], 15);
+            if (lastPosition) {
+                map.setView([lastPosition.latitude, lastPosition.longitude], 15, {
+                    animate: true,
+                    duration: 1
+                });
             }
         }
 
         function clearRoute() {
             userRoute = [];
+            totalDistance = 0;
+            document.getElementById('total-distance').textContent = '0 km';
+            document.getElementById('route-points').textContent = '0';
+            
             if (window.routeLayer) {
                 map.removeLayer(window.routeLayer);
                 window.routeLayer = null;
@@ -1338,7 +1426,16 @@
 
         function updateGPSDisplay(coords) {
             const gpsInfo = document.getElementById('gps-info');
+            const gpsError = document.getElementById('gps-error');
+            
+            if (gpsError) {
+                gpsError.classList.add('d-none');
+            }
+            
             if (gpsInfo) {
+                const accuracyColor = coords.accuracy < 20 ? 'text-success' : 
+                                   coords.accuracy < 50 ? 'text-warning' : 'text-danger';
+                
                 gpsInfo.innerHTML = `
                     <div class="row">
                         <div class="col-6">
@@ -1353,7 +1450,7 @@
                     <div class="row mt-2">
                         <div class="col-6">
                             <small class="text-muted">Accuracy</small>
-                            <div class="fw-bold">${coords.accuracy.toFixed(1)}m</div>
+                            <div class="fw-bold ${accuracyColor}">${coords.accuracy.toFixed(1)}m</div>
                         </div>
                         <div class="col-6">
                             <small class="text-muted">Speed</small>
@@ -1363,7 +1460,7 @@
                     <div class="row mt-2">
                         <div class="col-12">
                             <small class="text-muted">Last Update</small>
-                            <div class="fw-bold">${new Date().toLocaleTimeString()}</div>
+                            <div class="fw-bold">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</div>
                         </div>
                     </div>
                 `;
@@ -1383,23 +1480,27 @@
 
         function handleGPSError(error) {
             console.error('GPS Error:', error);
-            const gpsInfo = document.getElementById('gps-info');
-            if (gpsInfo) {
-                let message = 'GPS Error: ';
-                switch(error.code) {
-                    case error.PERMISSION_DENIED:
-                        message += 'Location permission denied.';
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        message += 'Location information unavailable.';
-                        break;
-                    case error.TIMEOUT:
-                        message += 'Location request timed out.';
-                        break;
-                    default:
-                        message += 'Unknown error.';
-                }
-                gpsInfo.innerHTML = `<div class="alert alert-warning">${message}</div>`;
+            showGPSError(getGPSErrorMessage(error));
+        }
+
+        function showGPSError(message) {
+            const gpsError = document.getElementById('gps-error');
+            if (gpsError) {
+                gpsError.textContent = message;
+                gpsError.classList.remove('d-none');
+            }
+        }
+
+        function getGPSErrorMessage(error) {
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    return '❌ Location permission denied. Please enable GPS in your browser settings.';
+                case error.POSITION_UNAVAILABLE:
+                    return '⚠️ Location information unavailable. Check if GPS is enabled on your device.';
+                case error.TIMEOUT:
+                    return '⏱️ Location request timed out. Trying again...';
+                default:
+                    return '❓ Unknown GPS error. Code: ' + error.code;
             }
         }
 
@@ -1434,51 +1535,45 @@
         function updateTrackingStats() {
             if (userRoute.length < 2) return;
             
-            // Calculate total distance
-            let totalDistance = 0;
             let maxSpeed = 0;
+            let totalSpeed = 0;
+            let validSpeeds = 0;
             
-            for (let i = 1; i < userRoute.length; i++) {
-                const prev = userRoute[i - 1];
-                const curr = userRoute[i];
-                
-                // Distance using Haversine formula
-                const distance = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
-                totalDistance += distance;
-                maxSpeed = Math.max(maxSpeed, curr.speed || 0);
+            for (let i = 0; i < userRoute.length; i++) {
+                const speed = userRoute[i].speed || 0;
+                if (speed > 0) {
+                    maxSpeed = Math.max(maxSpeed, speed);
+                    totalSpeed += speed;
+                    validSpeeds++;
+                }
             }
             
             // Update displays
-            const totalDistanceEl = document.getElementById('total-distance');
             const maxSpeedEl = document.getElementById('max-speed');
             const avgSpeedEl = document.getElementById('avg-speed');
             
-            if (totalDistanceEl) {
-                totalDistanceEl.textContent = totalDistance.toFixed(2) + ' km';
-            }
             if (maxSpeedEl) {
                 maxSpeedEl.textContent = (maxSpeed * 3.6).toFixed(1) + ' km/h';
             }
             
-            // Calculate average speed
-            if (userRoute.length > 1 && avgSpeedEl) {
-                const firstTime = userRoute[0].timestamp;
-                const lastTime = userRoute[userRoute.length - 1].timestamp;
-                const totalTime = (lastTime - firstTime) / 3600000; // hours
-                const avgSpeed = totalDistance / totalTime;
+            if (avgSpeedEl && validSpeeds > 0) {
+                const avgSpeed = (totalSpeed / validSpeeds) * 3.6;
                 avgSpeedEl.textContent = avgSpeed.toFixed(1) + ' km/h';
             }
         }
 
-        function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371; // Earth's radius in km
+        // Haversine Distance Calculation - FIXED
+        function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Earth's radius in kilometers
             const dLat = toRad(lat2 - lat1);
             const dLon = toRad(lon2 - lon1);
+            
             const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
                       Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
                       Math.sin(dLon/2) * Math.sin(dLon/2);
+            
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
+            return R * c; // Distance in kilometers
         }
 
         function toRad(degrees) {
@@ -1509,6 +1604,7 @@
                                 <div class="fw-bold">${location.name || 'User'}</div>
                                 <small class="text-muted">${(location.speed * 3.6 || 0).toFixed(1)} km/h</small>
                             </div>
+                            <small class="text-muted">${new Date(location.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</small>
                         </div>
                     `;
                 });
@@ -1669,6 +1765,9 @@
                 locationHistory.push(childSnapshot.val());
             });
             
+            // Sort by timestamp
+            locationHistory.sort((a, b) => a.timestamp - b.timestamp);
+            
             // Limit points
             if (locationHistory.length > maxPoints) {
                 const step = Math.floor(locationHistory.length / maxPoints);
@@ -1693,7 +1792,7 @@
             }
             
             // Calculate stats
-            let totalDistance = 0;
+            let historyDistance = 0;
             let maxSpeed = 0;
             let totalTime = 0;
             
@@ -1702,14 +1801,14 @@
                 const curr = locationHistory[i];
                 
                 // Distance
-                const distance = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
-                totalDistance += distance;
+                const distance = calculateHaversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+                historyDistance += distance;
                 
                 // Max speed
                 maxSpeed = Math.max(maxSpeed, curr.speed || 0);
                 
                 // Time
-                if (i === 1) totalTime += (curr.timestamp - prev.timestamp);
+                totalTime += (curr.timestamp - prev.timestamp);
             }
             
             // Update stats
@@ -1722,7 +1821,7 @@
                             <div class="stat-label">Points</div>
                         </div>
                         <div class="col-6 mb-3">
-                            <div class="stat-value">${totalDistance.toFixed(2)} km</div>
+                            <div class="stat-value">${historyDistance.toFixed(3)} km</div>
                             <div class="stat-label">Distance</div>
                         </div>
                         <div class="col-6">
@@ -1814,10 +1913,21 @@
             }
             
             // Create CSV content
-            let csv = 'Timestamp,Latitude,Longitude,Speed (km/h),Accuracy (m)\n';
-            locationHistory.forEach(point => {
-                csv += `${new Date(point.timestamp).toISOString()},${point.latitude},${point.longitude},${(point.speed * 3.6 || 0).toFixed(1)},${point.accuracy || 'N/A'}\n`;
-            });
+            let csv = 'Timestamp,Latitude,Longitude,Speed (km/h),Accuracy (m),Distance (km)\n';
+            let cumulativeDistance = 0;
+            
+            for (let i = 0; i < locationHistory.length; i++) {
+                const point = locationHistory[i];
+                if (i > 0) {
+                    const prev = locationHistory[i - 1];
+                    cumulativeDistance += calculateHaversineDistance(
+                        prev.latitude, prev.longitude,
+                        point.latitude, point.longitude
+                    );
+                }
+                
+                csv += `${new Date(point.timestamp).toISOString()},${point.latitude},${point.longitude},${(point.speed * 3.6 || 0).toFixed(1)},${point.accuracy || 'N/A'},${cumulativeDistance.toFixed(3)}\n`;
+            }
             
             // Create download link
             const blob = new Blob([csv], { type: 'text/csv' });
