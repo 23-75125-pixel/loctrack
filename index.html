@@ -1,0 +1,1883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web-Based Real-Time GPS Tracking System</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet Marker Cluster -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --dark-color: #1f2937;
+            --light-color: #f9fafb;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding-top: 56px; /* For fixed navbar */
+        }
+        
+        .card {
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            margin-bottom: 1rem;
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.5rem;
+        }
+        
+        .map-container {
+            height: 70vh;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .user-marker {
+            background-color: var(--primary-color);
+            border: 3px solid white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        
+        .admin-marker {
+            background-color: var(--danger-color);
+            border: 3px solid white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        
+        .online-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        
+        .online {
+            background-color: var(--secondary-color);
+            animation: pulse 2s infinite;
+        }
+        
+        .offline {
+            background-color: var(--dark-color);
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .login-container {
+            max-width: 400px;
+            margin: 5rem auto;
+        }
+        
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+        
+        .hero-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 3rem;
+            margin-top: 2rem;
+        }
+        
+        .tech-badge {
+            background-color: var(--light-color);
+            color: var(--dark-color);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            margin: 0.2rem;
+        }
+        
+        .stat-card {
+            text-align: center;
+            padding: 1.5rem;
+            border-radius: 10px;
+            background: white;
+            transition: transform 0.3s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        .history-timeline {
+            border-left: 3px solid var(--primary-color);
+            padding-left: 1.5rem;
+            margin-left: 1rem;
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+        
+        .timeline-item:before {
+            content: '';
+            position: absolute;
+            left: -1.8rem;
+            top: 5px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            border: 3px solid white;
+        }
+        
+        .install-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .map-container {
+                height: 50vh;
+            }
+            
+            .hero-section {
+                padding: 1.5rem;
+            }
+            
+            body {
+                padding-top: 66px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top" id="main-nav">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-map-marker-alt me-2"></i>GPS Tracker
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto" id="nav-links">
+                    <!-- Dynamic navigation links will be inserted here -->
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <div class="container-fluid mt-5 pt-4" id="content-area">
+        <!-- Content will be dynamically loaded here -->
+    </div>
+
+    <!-- Install PWA Button -->
+    <button id="install-btn" class="btn btn-primary install-btn">
+        <i class="fas fa-download me-2"></i>Install App
+    </button>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Leaflet Marker Cluster -->
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <!-- Main Application Script -->
+    <script>
+        // Firebase Configuration with YOUR API KEY
+        const firebaseConfig = {
+            apiKey: "AIzaSyDEwL1LbLAKfeI0Qb-Ko9ZT8E8Mr6B1iQU",
+            authDomain: "gps-tracker-capstone.firebaseapp.com",
+            databaseURL: "https://gps-tracker-capstone-default-rtdb.firebaseio.com",
+            projectId: "gps-tracker-capstone",
+            storageBucket: "gps-tracker-capstone.firebasestorage.app",
+            messagingSenderId: "869383068104",
+            appId: "1:869383068104:web:b861d259a39da4f8d7c8fd",
+            measurementId: "G-BNM867QJBV"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const database = firebase.database();
+
+        // Global Variables
+        let currentUser = null;
+        let currentPage = 'home';
+        let map = null;
+        let userMarkers = {};
+        let markerCluster = null;
+        let watchId = null;
+        let isTracking = false;
+        let userRoute = [];
+        let locationHistory = [];
+        let trackingStartTime = null;
+        let trackingTimer = null;
+
+        // PWA Manifest
+        const manifest = {
+            "name": "GPS Tracker",
+            "short_name": "GPS Tracker",
+            "description": "Real-time location tracking system",
+            "start_url": "./",
+            "display": "standalone",
+            "background_color": "#ffffff",
+            "theme_color": "#2563eb",
+            "icons": [
+                {
+                    "src": "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/icons/geo-alt-fill.svg",
+                    "sizes": "192x192",
+                    "type": "image/svg"
+                }
+            ]
+        };
+
+        // Initialize PWA
+        function initPWA() {
+            const manifestString = JSON.stringify(manifest);
+            const blob = new Blob([manifestString], {type: 'application/json'});
+            const manifestURL = URL.createObjectURL(blob);
+            
+            // Create manifest link
+            const manifestLink = document.createElement('link');
+            manifestLink.rel = 'manifest';
+            manifestLink.href = manifestURL;
+            document.head.appendChild(manifestLink);
+            
+            // Register Service Worker
+            if ('serviceWorker' in navigator) {
+                const swCode = `
+                    self.addEventListener('install', (event) => {
+                        event.waitUntil(
+                            caches.open('gps-tracker-v1').then((cache) => {
+                                return cache.addAll(['./']);
+                            })
+                        );
+                    });
+                    
+                    self.addEventListener('fetch', (event) => {
+                        event.respondWith(
+                            caches.match(event.request).then((response) => {
+                                return response || fetch(event.request);
+                            })
+                        );
+                    });
+                `;
+                
+                const blob = new Blob([swCode], {type: 'application/javascript'});
+                const swURL = URL.createObjectURL(blob);
+                
+                navigator.serviceWorker.register(swURL)
+                    .then(() => console.log('Service Worker registered'))
+                    .catch(err => console.log('Service Worker registration failed:', err));
+            }
+            
+            // Show install button
+            let deferredPrompt;
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                document.getElementById('install-btn').style.display = 'block';
+            });
+            
+            document.getElementById('install-btn').addEventListener('click', () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    deferredPrompt.userChoice.then(() => {
+                        document.getElementById('install-btn').style.display = 'none';
+                    });
+                }
+            });
+        }
+
+        // Navigation Management
+        function updateNavigation() {
+            const navLinks = document.getElementById('nav-links');
+            navLinks.innerHTML = '';
+            
+            if (currentUser) {
+                navLinks.innerHTML = `
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="loadPage('dashboard')">
+                            <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="loadPage('history')">
+                            <i class="fas fa-history me-1"></i>History
+                        </a>
+                    </li>
+                    ${currentUser.role === 'admin' ? `
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="loadPage('admin')">
+                            <i class="fas fa-users-cog me-1"></i>Admin
+                        </a>
+                    </li>
+                    ` : ''}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user me-1"></i>${currentUser.email.split('@')[0]}
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="loadPage('profile')">Profile</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="#" onclick="logout()">Logout</a></li>
+                        </ul>
+                    </li>
+                `;
+            } else {
+                navLinks.innerHTML = `
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="loadPage('home')">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="loadPage('login')">Login</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="loadPage('register')">Register</a>
+                    </li>
+                `;
+            }
+        }
+
+        // Page Loading System
+        function loadPage(page) {
+            currentPage = page;
+            const contentArea = document.getElementById('content-area');
+            
+            switch(page) {
+                case 'home':
+                    loadHomePage(contentArea);
+                    break;
+                case 'login':
+                    loadLoginPage(contentArea);
+                    break;
+                case 'register':
+                    loadRegisterPage(contentArea);
+                    break;
+                case 'dashboard':
+                    if (!currentUser) {
+                        loadLoginPage(contentArea);
+                        return;
+                    }
+                    loadDashboardPage(contentArea);
+                    break;
+                case 'admin':
+                    if (!currentUser || currentUser.role !== 'admin') {
+                        loadHomePage(contentArea);
+                        return;
+                    }
+                    loadAdminPage(contentArea);
+                    break;
+                case 'history':
+                    if (!currentUser) {
+                        loadLoginPage(contentArea);
+                        return;
+                    }
+                    loadHistoryPage(contentArea);
+                    break;
+                case 'profile':
+                    if (!currentUser) {
+                        loadLoginPage(contentArea);
+                        return;
+                    }
+                    loadProfilePage(contentArea);
+                    break;
+            }
+            
+            updateNavigation();
+        }
+
+        // Page Templates
+        function loadHomePage(container) {
+            container.innerHTML = `
+                <div class="container mt-4">
+                    <div class="hero-section">
+                        <div class="text-center mb-5">
+                            <h1 class="display-4 fw-bold mb-3">
+                                <i class="fas fa-map-marked-alt text-primary"></i> Real-Time GPS Tracking System
+                            </h1>
+                            <p class="lead text-muted mb-4">
+                                A capstone-grade web application for real-time location tracking using only free technologies
+                            </p>
+                            <div class="d-flex flex-wrap justify-content-center gap-2 mb-4">
+                                <span class="tech-badge"><i class="fab fa-html5 me-1"></i>HTML5 Geolocation</span>
+                                <span class="tech-badge"><i class="fas fa-map me-1"></i>Leaflet.js</span>
+                                <span class="tech-badge"><i class="fas fa-globe me-1"></i>OpenStreetMap</span>
+                                <span class="tech-badge"><i class="fas fa-database me-1"></i>Firebase</span>
+                                <span class="tech-badge"><i class="fas fa-mobile-alt me-1"></i>PWA</span>
+                            </div>
+                            ${!currentUser ? `
+                            <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+                                <button class="btn btn-primary btn-lg px-4" onclick="loadPage('login')">
+                                    <i class="fas fa-sign-in-alt me-2"></i>Get Started
+                                </button>
+                                <button class="btn btn-outline-primary btn-lg px-4" onclick="loadPage('register')">
+                                    <i class="fas fa-user-plus me-2"></i>Register
+                                </button>
+                            </div>
+                            ` : ''}
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-3 mb-4">
+                                <div class="stat-card">
+                                    <div class="feature-icon">
+                                        <i class="fas fa-satellite-dish"></i>
+                                    </div>
+                                    <h4>Real-Time GPS</h4>
+                                    <p class="text-muted">High-accuracy location updates every 2-3 seconds</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-4">
+                                <div class="stat-card">
+                                    <div class="feature-icon">
+                                        <i class="fas fa-map-marked-alt"></i>
+                                    </div>
+                                    <h4>Interactive Maps</h4>
+                                    <p class="text-muted">OpenStreetMap tiles with custom markers and clustering</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-4">
+                                <div class="stat-card">
+                                    <div class="feature-icon">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </div>
+                                    <h4>Live Sync</h4>
+                                    <p class="text-muted">Firebase real-time database synchronization</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-4">
+                                <div class="stat-card">
+                                    <div class="feature-icon">
+                                        <i class="fas fa-chart-line"></i>
+                                    </div>
+                                    <h4>Analytics</h4>
+                                    <p class="text-muted">Distance, speed, and route history tracking</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-5">
+                            <div class="col-md-6">
+                                <h3 class="mb-3"><i class="fas fa-bullseye me-2"></i>Project Goals</h3>
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item">
+                                        <i class="fas fa-check text-success me-2"></i>
+                                        Build using only free technologies
+                                    </li>
+                                    <li class="list-group-item">
+                                        <i class="fas fa-check text-success me-2"></i>
+                                        Mobile-first responsive design
+                                    </li>
+                                    <li class="list-group-item">
+                                        <i class="fas fa-check text-success me-2"></i>
+                                        Real-time location tracking
+                                    </li>
+                                    <li class="list-group-item">
+                                        <i class="fas fa-check text-success me-2"></i>
+                                        PWA with offline support
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h3 class="mb-3"><i class="fas fa-graduation-cap me-2"></i>Capstone Features</h3>
+                                <div class="alert alert-info">
+                                    <strong>Complete System Includes:</strong>
+                                    <ul class="mb-0 mt-2">
+                                        <li>Authentication & Authorization</li>
+                                        <li>Real-time GPS Tracking</li>
+                                        <li>Admin Dashboard</li>
+                                        <li>Location History & Analytics</li>
+                                        <li>PWA Installation</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function loadLoginPage(container) {
+            container.innerHTML = `
+                <div class="container">
+                    <div class="row justify-content-center mt-5">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-primary text-white">
+                                    <h4 class="mb-0"><i class="fas fa-sign-in-alt me-2"></i>Login</h4>
+                                </div>
+                                <div class="card-body">
+                                    <form id="login-form">
+                                        <div class="mb-3">
+                                            <label for="login-email" class="form-label">Email address</label>
+                                            <input type="email" class="form-control" id="login-email" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="login-password" class="form-label">Password</label>
+                                            <input type="password" class="form-control" id="login-password" required>
+                                        </div>
+                                        <div class="mb-3 form-check">
+                                            <input type="checkbox" class="form-check-input" id="remember-me">
+                                            <label class="form-check-label" for="remember-me">Remember me</label>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary w-100">
+                                            <i class="fas fa-sign-in-alt me-2"></i>Login
+                                        </button>
+                                    </form>
+                                    <div class="mt-3 text-center">
+                                        <p class="mb-0">Don't have an account? 
+                                            <a href="#" class="text-primary" onclick="loadPage('register')">Register here</a>
+                                        </p>
+                                    </div>
+                                    <div id="login-error" class="alert alert-danger mt-3 d-none"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('login-form').addEventListener('submit', handleLogin);
+        }
+
+        function loadRegisterPage(container) {
+            container.innerHTML = `
+                <div class="container">
+                    <div class="row justify-content-center mt-5">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-primary text-white">
+                                    <h4 class="mb-0"><i class="fas fa-user-plus me-2"></i>Register</h4>
+                                </div>
+                                <div class="card-body">
+                                    <form id="register-form">
+                                        <div class="mb-3">
+                                            <label for="register-name" class="form-label">Full Name</label>
+                                            <input type="text" class="form-control" id="register-name" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="register-email" class="form-label">Email address</label>
+                                            <input type="email" class="form-control" id="register-email" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="register-password" class="form-label">Password</label>
+                                            <input type="password" class="form-control" id="register-password" required minlength="6">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="register-role" class="form-label">Account Type</label>
+                                            <select class="form-select" id="register-role">
+                                                <option value="user">User / Tracker</option>
+                                                <option value="admin">Administrator</option>
+                                            </select>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary w-100">
+                                            <i class="fas fa-user-plus me-2"></i>Create Account
+                                        </button>
+                                    </form>
+                                    <div class="mt-3 text-center">
+                                        <p class="mb-0">Already have an account? 
+                                            <a href="#" class="text-primary" onclick="loadPage('login')">Login here</a>
+                                        </p>
+                                    </div>
+                                    <div id="register-error" class="alert alert-danger mt-3 d-none"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('register-form').addEventListener('submit', handleRegister);
+        }
+
+        function loadDashboardPage(container) {
+            container.innerHTML = `
+                <div class="container-fluid mt-3">
+                    <div class="row">
+                        <!-- Left Sidebar -->
+                        <div class="col-lg-3 col-md-4 mb-3">
+                            <div class="card">
+                                <div class="card-header bg-primary text-white">
+                                    <h5 class="mb-0"><i class="fas fa-user me-2"></i>User Info</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex align-items-center mb-3">
+                                        <div class="user-avatar me-3">
+                                            ${currentUser.email.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-0">${currentUser.name || currentUser.email.split('@')[0]}</h6>
+                                            <small class="text-muted">${currentUser.email}</small>
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-6">
+                                            <div class="stat-card p-2">
+                                                <div class="stat-value" id="total-distance">0 km</div>
+                                                <div class="stat-label">Distance</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="stat-card p-2">
+                                                <div class="stat-value" id="avg-speed">0 km/h</div>
+                                                <div class="stat-label">Avg Speed</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-3">
+                                <div class="card-header bg-success text-white">
+                                    <h5 class="mb-0"><i class="fas fa-satellite me-2"></i>GPS Controls</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-grid gap-2">
+                                        <button id="start-tracking" class="btn btn-success btn-lg" onclick="startTracking()">
+                                            <i class="fas fa-play me-2"></i>Start Tracking
+                                        </button>
+                                        <button id="stop-tracking" class="btn btn-danger btn-lg" onclick="stopTracking()" disabled>
+                                            <i class="fas fa-stop me-2"></i>Stop Tracking
+                                        </button>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button class="btn btn-outline-primary w-100 mb-2" onclick="centerOnUser()">
+                                            <i class="fas fa-crosshairs me-2"></i>Center on Me
+                                        </button>
+                                        <button class="btn btn-outline-secondary w-100" onclick="clearRoute()">
+                                            <i class="fas fa-trash me-2"></i>Clear Route
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-3">
+                                <div class="card-header bg-info text-white">
+                                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>GPS Information</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="gps-info">
+                                        <p class="text-muted">Waiting for GPS signal...</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-3">
+                                <div class="card-header bg-warning text-white">
+                                    <h5 class="mb-0"><i class="fas fa-users me-2"></i>Active Users</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="active-users-list">
+                                        <p class="text-muted">No active users</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Map Area -->
+                        <div class="col-lg-9 col-md-8">
+                            <div class="card">
+                                <div class="card-header bg-dark text-white">
+                                    <h5 class="mb-0"><i class="fas fa-map me-2"></i>Live Tracking Map</h5>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div id="map" class="map-container"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Tracking Stats</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row text-center">
+                                                <div class="col-6">
+                                                    <div class="stat-value" id="tracking-time">00:00</div>
+                                                    <div class="stat-label">Duration</div>
+                                                </div>
+                                                <div class="col-6">
+                                                    <div class="stat-value" id="max-speed">0 km/h</div>
+                                                    <div class="stat-label">Max Speed</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0"><i class="fas fa-route me-2"></i>Route Info</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row text-center">
+                                                <div class="col-6">
+                                                    <div class="stat-value" id="route-points">0</div>
+                                                    <div class="stat-label">Points</div>
+                                                </div>
+                                                <div class="col-6">
+                                                    <div class="stat-value" id="last-update">--:--</div>
+                                                    <div class="stat-label">Last Update</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            initializeMap();
+            loadActiveUsers();
+        }
+
+        function loadAdminPage(container) {
+            container.innerHTML = `
+                <div class="container-fluid mt-3">
+                    <h2 class="mb-4"><i class="fas fa-users-cog me-2"></i>Admin Dashboard</h2>
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-header bg-dark text-white">
+                                    <h5 class="mb-0"><i class="fas fa-map me-2"></i>All Users Map</h5>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div id="admin-map" class="map-container"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header bg-danger text-white">
+                                    <h5 class="mb-0"><i class="fas fa-users me-2"></i>User Management</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="input-group mb-3">
+                                        <input type="text" id="user-search" class="form-control" placeholder="Search users...">
+                                        <button class="btn btn-outline-primary" type="button" onclick="searchUsers()">
+                                            <i class="fas fa-search"></i>
+                                        </button>
+                                    </div>
+                                    <div id="admin-users-list" style="max-height: 300px; overflow-y: auto;">
+                                        <p class="text-muted">Loading users...</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-3">
+                                <div class="card-header bg-info text-white">
+                                    <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>System Stats</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row text-center">
+                                        <div class="col-6 mb-3">
+                                            <div class="stat-value" id="total-users">0</div>
+                                            <div class="stat-label">Total Users</div>
+                                        </div>
+                                        <div class="col-6 mb-3">
+                                            <div class="stat-value" id="online-users">0</div>
+                                            <div class="stat-label">Online Now</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="stat-value" id="active-trackers">0</div>
+                                            <div class="stat-label">Active Trackers</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="stat-value" id="locations-today">0</div>
+                                            <div class="stat-label">Locations Today</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-primary text-white">
+                                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>Recent Activity</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="recent-activity">
+                                        <p class="text-muted">Loading activity...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            initializeAdminMap();
+            loadAllUsers();
+            loadSystemStats();
+        }
+
+        function loadHistoryPage(container) {
+            container.innerHTML = `
+                <div class="container-fluid mt-3">
+                    <h2 class="mb-4"><i class="fas fa-history me-2"></i>Location History</h2>
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header bg-primary text-white">
+                                    <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filter History</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Date Range</label>
+                                        <div class="row">
+                                            <div class="col-6">
+                                                <input type="date" id="start-date" class="form-control">
+                                            </div>
+                                            <div class="col-6">
+                                                <input type="date" id="end-date" class="form-control">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Show Points</label>
+                                        <input type="range" class="form-range" id="points-range" min="10" max="1000" value="100">
+                                        <div class="text-center">
+                                            <span id="points-value">100</span> points
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-primary w-100 mb-2" onclick="loadHistoryData()">
+                                        <i class="fas fa-search me-2"></i>Load History
+                                    </button>
+                                    <button class="btn btn-success w-100 mb-2" onclick="playHistory()">
+                                        <i class="fas fa-play me-2"></i>Playback
+                                    </button>
+                                    <button class="btn btn-outline-primary w-100" onclick="exportHistory()">
+                                        <i class="fas fa-download me-2"></i>Export Data
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-3">
+                                <div class="card-header bg-info text-white">
+                                    <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>History Stats</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="history-stats">
+                                        <p class="text-muted">No data loaded</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-header bg-dark text-white">
+                                    <h5 class="mb-0"><i class="fas fa-map me-2"></i>History Map</h5>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div id="history-map" class="map-container"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>History Timeline</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="history-timeline" class="history-timeline">
+                                        <p class="text-muted">Select date range and load history</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            initializeHistoryMap();
+            setupHistoryControls();
+        }
+
+        function loadProfilePage(container) {
+            container.innerHTML = `
+                <div class="container mt-4">
+                    <div class="row justify-content-center">
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-header bg-primary text-white">
+                                    <h4 class="mb-0"><i class="fas fa-user-circle me-2"></i>User Profile</h4>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-4 text-center mb-4">
+                                            <div class="user-avatar mx-auto" style="width: 100px; height: 100px; font-size: 2rem;">
+                                                ${currentUser.email.charAt(0).toUpperCase()}
+                                            </div>
+                                            <h5 class="mt-3">${currentUser.name || 'User'}</h5>
+                                            <span class="badge bg-${currentUser.role === 'admin' ? 'danger' : 'primary'}">
+                                                ${currentUser.role}
+                                            </span>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <form id="profile-form">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Email Address</label>
+                                                    <input type="email" class="form-control" value="${currentUser.email}" disabled>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">Full Name</label>
+                                                    <input type="text" class="form-control" id="profile-name" value="${currentUser.name || ''}">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">Account Created</label>
+                                                    <input type="text" class="form-control" 
+                                                        value="${new Date(currentUser.createdAt).toLocaleDateString()}" disabled>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">Last Login</label>
+                                                    <input type="text" class="form-control" 
+                                                        value="${new Date(currentUser.lastLogin).toLocaleString()}" disabled>
+                                                </div>
+                                                <button type="submit" class="btn btn-primary">
+                                                    <i class="fas fa-save me-2"></i>Save Changes
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-3">
+                                <div class="card-header bg-warning text-white">
+                                    <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Security</h5>
+                                </div>
+                                <div class="card-body">
+                                    <button class="btn btn-outline-danger" onclick="changePassword()">
+                                        <i class="fas fa-key me-2"></i>Change Password
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Authentication Handlers
+        async function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            const errorDiv = document.getElementById('login-error');
+            
+            try {
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Get user data from database
+                const userRef = database.ref('users/' + user.uid);
+                const snapshot = await userRef.once('value');
+                let userData = snapshot.val();
+                
+                if (!userData) {
+                    // Create user data if it doesn't exist
+                    userData = {
+                        email: user.email,
+                        name: user.email.split('@')[0],
+                        role: 'user',
+                        createdAt: Date.now(),
+                        lastLogin: Date.now(),
+                        status: 'online'
+                    };
+                    await userRef.set(userData);
+                } else {
+                    // Update last login
+                    await userRef.update({ lastLogin: Date.now(), status: 'online' });
+                }
+                
+                currentUser = { uid: user.uid, ...userData };
+                loadPage('dashboard');
+                
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const name = document.getElementById('register-name').value;
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            const role = document.getElementById('register-role').value;
+            const errorDiv = document.getElementById('register-error');
+            
+            try {
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Save user data to database
+                const userData = {
+                    email: email,
+                    name: name,
+                    role: role,
+                    createdAt: Date.now(),
+                    lastLogin: Date.now(),
+                    status: 'online'
+                };
+                
+                await database.ref('users/' + user.uid).set(userData);
+                currentUser = { uid: user.uid, ...userData };
+                loadPage('dashboard');
+                
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('d-none');
+            }
+        }
+
+        async function logout() {
+            if (currentUser) {
+                await database.ref('users/' + currentUser.uid + '/status').set('offline');
+            }
+            await auth.signOut();
+            currentUser = null;
+            stopTracking();
+            loadPage('home');
+        }
+
+        // Map Functions
+        function initializeMap() {
+            if (map) {
+                map.remove();
+            }
+            
+            map = L.map('map').setView([14.5995, 120.9842], 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+            
+            markerCluster = L.markerClusterGroup();
+            map.addLayer(markerCluster);
+            
+            // Add scale control
+            L.control.scale().addTo(map);
+        }
+
+        function initializeAdminMap() {
+            const adminMapDiv = document.getElementById('admin-map');
+            if (!adminMapDiv) return;
+            
+            const adminMap = L.map('admin-map').setView([14.5995, 120.9842], 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(adminMap);
+            
+            // Load all users on admin map
+            database.ref('locations').on('value', (snapshot) => {
+                adminMap.eachLayer((layer) => {
+                    if (layer instanceof L.Marker) {
+                        adminMap.removeLayer(layer);
+                    }
+                });
+                
+                const locations = snapshot.val();
+                if (locations) {
+                    Object.keys(locations).forEach(userId => {
+                        const location = locations[userId];
+                        if (location && location.latitude && location.longitude) {
+                            const marker = L.marker([location.latitude, location.longitude], {
+                                icon: L.divIcon({ className: 'admin-marker' })
+                            }).addTo(adminMap);
+                            
+                            marker.bindPopup(`
+                                <strong>User ID:</strong> ${userId.substring(0, 8)}<br>
+                                <strong>Location:</strong> ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}<br>
+                                <strong>Speed:</strong> ${location.speed ? (location.speed * 3.6).toFixed(1) + ' km/h' : 'N/A'}<br>
+                                <strong>Time:</strong> ${new Date(location.timestamp).toLocaleTimeString()}
+                            `);
+                        }
+                    });
+                }
+            });
+        }
+
+        function initializeHistoryMap() {
+            const historyMapDiv = document.getElementById('history-map');
+            if (!historyMapDiv) return null;
+            
+            const historyMap = L.map('history-map').setView([14.5995, 120.9842], 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(historyMap);
+            
+            return historyMap;
+        }
+
+        // GPS Tracking Functions
+        function startTracking() {
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by your browser');
+                return;
+            }
+            
+            if (isTracking) {
+                return;
+            }
+            
+            isTracking = true;
+            document.getElementById('start-tracking').disabled = true;
+            document.getElementById('stop-tracking').disabled = false;
+            
+            const options = {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 5000
+            };
+            
+            watchId = navigator.geolocation.watchPosition(
+                (position) => handlePositionUpdate(position),
+                (error) => handleGPSError(error),
+                options
+            );
+            
+            // Start tracking timer
+            startTrackingTimer();
+        }
+
+        function stopTracking() {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            
+            isTracking = false;
+            document.getElementById('start-tracking').disabled = false;
+            document.getElementById('stop-tracking').disabled = true;
+            
+            // Update status in database
+            if (currentUser) {
+                database.ref('locations/' + currentUser.uid).remove();
+                database.ref('users/' + currentUser.uid + '/status').set('offline');
+            }
+            
+            // Stop tracking timer
+            stopTrackingTimer();
+        }
+
+        async function handlePositionUpdate(position) {
+            const locationData = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                speed: position.coords.speed || 0,
+                heading: position.coords.heading,
+                timestamp: Date.now(),
+                userId: currentUser.uid,
+                name: currentUser.name
+            };
+            
+            // Update database
+            await database.ref('locations/' + currentUser.uid).set(locationData);
+            
+            // Save to history
+            await database.ref('history/' + currentUser.uid).push({
+                ...locationData,
+                timestamp: Date.now()
+            });
+            
+            // Add to route history
+            userRoute.push(locationData);
+            
+            // Update map
+            updateUserMarker(locationData);
+            
+            // Update GPS info display
+            updateGPSDisplay(position.coords);
+            
+            // Update stats
+            updateTrackingStats();
+        }
+
+        function updateUserMarker(location) {
+            if (!map) return;
+            
+            const latLng = [location.latitude, location.longitude];
+            
+            // Remove old marker if exists
+            if (userMarkers[currentUser.uid]) {
+                map.removeLayer(userMarkers[currentUser.uid]);
+            }
+            
+            // Create new marker
+            const marker = L.marker(latLng, {
+                icon: L.divIcon({ className: 'user-marker' })
+            }).addTo(map);
+            
+            userMarkers[currentUser.uid] = marker;
+            
+            // Center map on user if they're moving fast
+            if (location.speed > 2) {
+                map.setView(latLng);
+            }
+            
+            // Draw route if we have enough points
+            if (userRoute.length > 1) {
+                drawRoute();
+            }
+        }
+
+        function drawRoute() {
+            if (userRoute.length < 2) return;
+            
+            // Remove old route if exists
+            if (window.routeLayer) {
+                map.removeLayer(window.routeLayer);
+            }
+            
+            const latLngs = userRoute.map(loc => [loc.latitude, loc.longitude]);
+            window.routeLayer = L.polyline(latLngs, {
+                color: '#2563eb',
+                weight: 3,
+                opacity: 0.7,
+                smoothFactor: 1
+            }).addTo(map);
+        }
+
+        function centerOnUser() {
+            if (userRoute.length > 0) {
+                const lastLocation = userRoute[userRoute.length - 1];
+                map.setView([lastLocation.latitude, lastLocation.longitude], 15);
+            }
+        }
+
+        function clearRoute() {
+            userRoute = [];
+            if (window.routeLayer) {
+                map.removeLayer(window.routeLayer);
+                window.routeLayer = null;
+            }
+        }
+
+        function updateGPSDisplay(coords) {
+            const gpsInfo = document.getElementById('gps-info');
+            if (gpsInfo) {
+                gpsInfo.innerHTML = `
+                    <div class="row">
+                        <div class="col-6">
+                            <small class="text-muted">Latitude</small>
+                            <div class="fw-bold">${coords.latitude.toFixed(6)}</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">Longitude</small>
+                            <div class="fw-bold">${coords.longitude.toFixed(6)}</div>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-6">
+                            <small class="text-muted">Accuracy</small>
+                            <div class="fw-bold">${coords.accuracy.toFixed(1)}m</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">Speed</small>
+                            <div class="fw-bold">${coords.speed ? (coords.speed * 3.6).toFixed(1) + ' km/h' : '0 km/h'}</div>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <small class="text-muted">Last Update</small>
+                            <div class="fw-bold">${new Date().toLocaleTimeString()}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Update last update time
+            const lastUpdateEl = document.getElementById('last-update');
+            const routePointsEl = document.getElementById('route-points');
+            
+            if (lastUpdateEl) {
+                lastUpdateEl.textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            }
+            if (routePointsEl) {
+                routePointsEl.textContent = userRoute.length;
+            }
+        }
+
+        function handleGPSError(error) {
+            console.error('GPS Error:', error);
+            const gpsInfo = document.getElementById('gps-info');
+            if (gpsInfo) {
+                let message = 'GPS Error: ';
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        message += 'Location permission denied.';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        message += 'Location information unavailable.';
+                        break;
+                    case error.TIMEOUT:
+                        message += 'Location request timed out.';
+                        break;
+                    default:
+                        message += 'Unknown error.';
+                }
+                gpsInfo.innerHTML = `<div class="alert alert-warning">${message}</div>`;
+            }
+        }
+
+        // Tracking Timer
+        function startTrackingTimer() {
+            trackingStartTime = Date.now();
+            trackingTimer = setInterval(updateTrackingTime, 1000);
+        }
+
+        function stopTrackingTimer() {
+            if (trackingTimer) {
+                clearInterval(trackingTimer);
+                trackingTimer = null;
+            }
+        }
+
+        function updateTrackingTime() {
+            if (!trackingStartTime) return;
+            
+            const elapsed = Date.now() - trackingStartTime;
+            const hours = Math.floor(elapsed / 3600000);
+            const minutes = Math.floor((elapsed % 3600000) / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+            
+            const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            const trackingTimeEl = document.getElementById('tracking-time');
+            if (trackingTimeEl) {
+                trackingTimeEl.textContent = timeString;
+            }
+        }
+
+        function updateTrackingStats() {
+            if (userRoute.length < 2) return;
+            
+            // Calculate total distance
+            let totalDistance = 0;
+            let maxSpeed = 0;
+            
+            for (let i = 1; i < userRoute.length; i++) {
+                const prev = userRoute[i - 1];
+                const curr = userRoute[i];
+                
+                // Distance using Haversine formula
+                const distance = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+                totalDistance += distance;
+                maxSpeed = Math.max(maxSpeed, curr.speed || 0);
+            }
+            
+            // Update displays
+            const totalDistanceEl = document.getElementById('total-distance');
+            const maxSpeedEl = document.getElementById('max-speed');
+            const avgSpeedEl = document.getElementById('avg-speed');
+            
+            if (totalDistanceEl) {
+                totalDistanceEl.textContent = totalDistance.toFixed(2) + ' km';
+            }
+            if (maxSpeedEl) {
+                maxSpeedEl.textContent = (maxSpeed * 3.6).toFixed(1) + ' km/h';
+            }
+            
+            // Calculate average speed
+            if (userRoute.length > 1 && avgSpeedEl) {
+                const firstTime = userRoute[0].timestamp;
+                const lastTime = userRoute[userRoute.length - 1].timestamp;
+                const totalTime = (lastTime - firstTime) / 3600000; // hours
+                const avgSpeed = totalDistance / totalTime;
+                avgSpeedEl.textContent = avgSpeed.toFixed(1) + ' km/h';
+            }
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Earth's radius in km
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function toRad(degrees) {
+            return degrees * Math.PI / 180;
+        }
+
+        // User Management Functions
+        function loadActiveUsers() {
+            const usersList = document.getElementById('active-users-list');
+            if (!usersList) return;
+            
+            database.ref('locations').on('value', (snapshot) => {
+                const locations = snapshot.val();
+                if (!locations || Object.keys(locations).length === 0) {
+                    usersList.innerHTML = '<p class="text-muted">No active users</p>';
+                    return;
+                }
+                
+                let html = '';
+                Object.keys(locations).forEach(userId => {
+                    const location = locations[userId];
+                    if (userId === currentUser.uid) return; // Skip current user
+                    
+                    html += `
+                        <div class="d-flex align-items-center mb-2 p-2 border rounded">
+                            <span class="online-status online me-2"></span>
+                            <div class="flex-grow-1">
+                                <div class="fw-bold">${location.name || 'User'}</div>
+                                <small class="text-muted">${(location.speed * 3.6 || 0).toFixed(1)} km/h</small>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                usersList.innerHTML = html || '<p class="text-muted">No other active users</p>';
+            });
+        }
+
+        function loadAllUsers() {
+            const usersList = document.getElementById('admin-users-list');
+            if (!usersList) return;
+            
+            database.ref('users').on('value', (snapshot) => {
+                const users = snapshot.val();
+                if (!users) {
+                    usersList.innerHTML = '<p class="text-muted">No users found</p>';
+                    return;
+                }
+                
+                let html = '';
+                Object.keys(users).forEach(userId => {
+                    const user = users[userId];
+                    html += `
+                        <div class="d-flex align-items-center mb-2 p-2 border rounded">
+                            <div class="user-avatar me-2">
+                                ${user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-bold">${user.name || 'User'}</div>
+                                <small class="text-muted">${user.email}</small>
+                            </div>
+                            <div>
+                                <span class="badge bg-${user.role === 'admin' ? 'danger' : 'primary'}">
+                                    ${user.role}
+                                </span>
+                                <span class="online-status ${user.status === 'online' ? 'online' : 'offline'} ms-1"></span>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                usersList.innerHTML = html;
+            });
+        }
+
+        function searchUsers() {
+            const searchTerm = document.getElementById('user-search').value.toLowerCase();
+            const usersList = document.getElementById('admin-users-list');
+            
+            database.ref('users').once('value').then(snapshot => {
+                const users = snapshot.val();
+                if (!users) return;
+                
+                let html = '';
+                Object.keys(users).forEach(userId => {
+                    const user = users[userId];
+                    const userName = user.name || '';
+                    const userEmail = user.email || '';
+                    
+                    if (searchTerm === '' || 
+                        userName.toLowerCase().includes(searchTerm) || 
+                        userEmail.toLowerCase().includes(searchTerm)) {
+                        
+                        html += `
+                            <div class="d-flex align-items-center mb-2 p-2 border rounded">
+                                <div class="user-avatar me-2">
+                                    ${user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold">${user.name || 'User'}</div>
+                                    <small class="text-muted">${user.email}</small>
+                                </div>
+                                <div>
+                                    <span class="badge bg-${user.role === 'admin' ? 'danger' : 'primary'}">
+                                        ${user.role}
+                                    </span>
+                                    <span class="online-status ${user.status === 'online' ? 'online' : 'offline'} ms-1"></span>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+                
+                usersList.innerHTML = html || '<p class="text-muted">No users found</p>';
+            });
+        }
+
+        function loadSystemStats() {
+            // Load total users
+            database.ref('users').once('value').then(snapshot => {
+                const totalUsersEl = document.getElementById('total-users');
+                if (totalUsersEl) {
+                    totalUsersEl.textContent = snapshot.numChildren();
+                }
+            });
+            
+            // Load online users
+            database.ref('users').orderByChild('status').equalTo('online').once('value').then(snapshot => {
+                const onlineUsersEl = document.getElementById('online-users');
+                if (onlineUsersEl) {
+                    onlineUsersEl.textContent = snapshot.numChildren();
+                }
+            });
+            
+            // Load active trackers
+            database.ref('locations').once('value').then(snapshot => {
+                const activeTrackersEl = document.getElementById('active-trackers');
+                if (activeTrackersEl) {
+                    activeTrackersEl.textContent = snapshot.numChildren();
+                }
+            });
+        }
+
+        // History Functions
+        function setupHistoryControls() {
+            const pointsRange = document.getElementById('points-range');
+            const pointsValue = document.getElementById('points-value');
+            
+            if (pointsRange && pointsValue) {
+                pointsRange.addEventListener('input', function() {
+                    pointsValue.textContent = this.value;
+                });
+                
+                // Set default dates
+                const today = new Date();
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                
+                const startDateEl = document.getElementById('start-date');
+                const endDateEl = document.getElementById('end-date');
+                
+                if (startDateEl && endDateEl) {
+                    startDateEl.value = yesterday.toISOString().split('T')[0];
+                    endDateEl.value = today.toISOString().split('T')[0];
+                }
+            }
+        }
+
+        async function loadHistoryData() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            const maxPoints = parseInt(document.getElementById('points-range').value);
+            
+            if (!startDate || !endDate) {
+                alert('Please select date range');
+                return;
+            }
+            
+            const startTimestamp = new Date(startDate).getTime();
+            const endTimestamp = new Date(endDate + 'T23:59:59').getTime();
+            
+            // Load history from database
+            const historyRef = database.ref('history/' + currentUser.uid);
+            const snapshot = await historyRef.orderByChild('timestamp').startAt(startTimestamp).endAt(endTimestamp).once('value');
+            
+            locationHistory = [];
+            snapshot.forEach(childSnapshot => {
+                locationHistory.push(childSnapshot.val());
+            });
+            
+            // Limit points
+            if (locationHistory.length > maxPoints) {
+                const step = Math.floor(locationHistory.length / maxPoints);
+                locationHistory = locationHistory.filter((_, index) => index % step === 0);
+            }
+            
+            displayHistory();
+        }
+
+        function displayHistory() {
+            if (locationHistory.length === 0) {
+                const historyStatsEl = document.getElementById('history-stats');
+                const historyTimelineEl = document.getElementById('history-timeline');
+                
+                if (historyStatsEl) {
+                    historyStatsEl.innerHTML = '<p class="text-muted">No data found</p>';
+                }
+                if (historyTimelineEl) {
+                    historyTimelineEl.innerHTML = '<p class="text-muted">No data found</p>';
+                }
+                return;
+            }
+            
+            // Calculate stats
+            let totalDistance = 0;
+            let maxSpeed = 0;
+            let totalTime = 0;
+            
+            for (let i = 1; i < locationHistory.length; i++) {
+                const prev = locationHistory[i - 1];
+                const curr = locationHistory[i];
+                
+                // Distance
+                const distance = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+                totalDistance += distance;
+                
+                // Max speed
+                maxSpeed = Math.max(maxSpeed, curr.speed || 0);
+                
+                // Time
+                if (i === 1) totalTime += (curr.timestamp - prev.timestamp);
+            }
+            
+            // Update stats
+            const historyStatsEl = document.getElementById('history-stats');
+            if (historyStatsEl) {
+                historyStatsEl.innerHTML = `
+                    <div class="row text-center">
+                        <div class="col-6 mb-3">
+                            <div class="stat-value">${locationHistory.length}</div>
+                            <div class="stat-label">Points</div>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <div class="stat-value">${totalDistance.toFixed(2)} km</div>
+                            <div class="stat-label">Distance</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="stat-value">${(maxSpeed * 3.6).toFixed(1)} km/h</div>
+                            <div class="stat-label">Max Speed</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="stat-value">${Math.floor(totalTime / 3600000)}h ${Math.floor((totalTime % 3600000) / 60000)}m</div>
+                            <div class="stat-label">Duration</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Update timeline
+            const historyTimelineEl = document.getElementById('history-timeline');
+            if (historyTimelineEl) {
+                let timelineHTML = '';
+                locationHistory.slice(-10).reverse().forEach(point => {
+                    timelineHTML += `
+                        <div class="timeline-item">
+                            <h6>${new Date(point.timestamp).toLocaleTimeString()}</h6>
+                            <p class="text-muted mb-1">
+                                ${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}<br>
+                                Speed: ${(point.speed * 3.6 || 0).toFixed(1)} km/h
+                            </p>
+                        </div>
+                    `;
+                });
+                historyTimelineEl.innerHTML = timelineHTML;
+            }
+            
+            // Update map
+            const historyMap = initializeHistoryMap();
+            if (!historyMap) return;
+            
+            // Add markers
+            locationHistory.forEach((point, index) => {
+                if (index % Math.ceil(locationHistory.length / 20) === 0) { // Show every 20th point
+                    L.marker([point.latitude, point.longitude]).addTo(historyMap)
+                        .bindPopup(`Point ${index + 1}<br>${new Date(point.timestamp).toLocaleString()}`);
+                }
+            });
+            
+            // Add polyline
+            const latLngs = locationHistory.map(point => [point.latitude, point.longitude]);
+            L.polyline(latLngs, { color: '#2563eb', weight: 3 }).addTo(historyMap);
+            
+            // Fit bounds
+            if (latLngs.length > 0) {
+                historyMap.fitBounds(latLngs);
+            }
+        }
+
+        function playHistory() {
+            if (locationHistory.length === 0) {
+                alert('Please load history data first');
+                return;
+            }
+            
+            const historyMapDiv = document.getElementById('history-map');
+            if (!historyMapDiv) return;
+            
+            const historyMap = L.map('history-map').setView([locationHistory[0].latitude, locationHistory[0].longitude], 15);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(historyMap);
+            
+            let currentIndex = 0;
+            const marker = L.marker([locationHistory[0].latitude, locationHistory[0].longitude]).addTo(historyMap);
+            
+            const playInterval = setInterval(() => {
+                if (currentIndex >= locationHistory.length) {
+                    clearInterval(playInterval);
+                    return;
+                }
+                
+                const point = locationHistory[currentIndex];
+                marker.setLatLng([point.latitude, point.longitude]);
+                historyMap.setView([point.latitude, point.longitude], 15);
+                
+                currentIndex++;
+            }, 500); // Update every 500ms
+        }
+
+        function exportHistory() {
+            if (locationHistory.length === 0) {
+                alert('No data to export');
+                return;
+            }
+            
+            // Create CSV content
+            let csv = 'Timestamp,Latitude,Longitude,Speed (km/h),Accuracy (m)\n';
+            locationHistory.forEach(point => {
+                csv += `${new Date(point.timestamp).toISOString()},${point.latitude},${point.longitude},${(point.speed * 3.6 || 0).toFixed(1)},${point.accuracy || 'N/A'}\n`;
+            });
+            
+            // Create download link
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gps-history-${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize PWA
+            initPWA();
+            
+            // Listen for auth state changes
+            auth.onAuthStateChanged(async (user) => {
+                if (user) {
+                    // Get user data from database
+                    const userRef = database.ref('users/' + user.uid);
+                    const snapshot = await userRef.once('value');
+                    const userData = snapshot.val();
+                    
+                    if (userData) {
+                        currentUser = { uid: user.uid, ...userData };
+                        loadPage('dashboard');
+                    } else {
+                        // Create user data if it doesn't exist
+                        const newUserData = {
+                            email: user.email,
+                            name: user.email.split('@')[0],
+                            role: 'user',
+                            createdAt: Date.now(),
+                            lastLogin: Date.now(),
+                            status: 'online'
+                        };
+                        await userRef.set(newUserData);
+                        currentUser = { uid: user.uid, ...newUserData };
+                        loadPage('dashboard');
+                    }
+                } else {
+                    currentUser = null;
+                    loadPage('home');
+                }
+            });
+            
+            // Initialize with home page
+            loadPage('home');
+            
+            // Setup beforeunload to update status
+            window.addEventListener('beforeunload', async () => {
+                if (currentUser && isTracking) {
+                    await database.ref('users/' + currentUser.uid + '/status').set('offline');
+                    await database.ref('locations/' + currentUser.uid).remove();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
